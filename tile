@@ -1,0 +1,47 @@
+import pygame
+from pygame.locals import *
+import sys
+from tilelibrary import tilecolours 
+
+
+class Tile:
+    def __init__(self, letter, position, tilesize, font, lettercolour, tilecolours):
+       self.letter = letter
+       self.position = position
+       self.tilesize = tilesize
+       self.font = font
+       self.lettercolour = lettercolour
+       self.tilecolours = tilecolours
+       self.hasMerged = False
+
+    def getColour(self): #get the color corresponding to the tile's letter from the color library.
+        return self.tilecolours.get(self.letter, tilecolours['empty'])
+
+    def getLetterColour(self, letter):
+        if letter > 'H':  
+            return tilecolours['light text']
+        else:
+            return tilecolours['dark text']
+            
+
+    def draw(self, screen): #determines tile's colour based on its letter
+        pygame.draw.rect(screen, self.tilecolours[self.letter], (*self.position, self.tilesize, self.tilesize))
+
+        letter_color = self.getLetterColour(self.letter)
+
+        text_surface = self.font.render(self.letter, True, self.lettercolour)  
+        text_rect = text_surface.get_rect(center=(self.position[0] + self.tilesize / 2, self.position[1] + self.tilesize / 2))
+        screen.blit(text_surface, text_rect)
+
+    
+    def nextLetter(self, letter):
+        if self.letter != ' ':
+            self.letter = chr(ord(self.letter) + 1)
+            self.hasMerged = True
+        return self.letter
+
+
+
+ 
+    
+    
