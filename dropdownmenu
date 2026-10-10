@@ -1,0 +1,46 @@
+import pygame
+
+BG = (250,248,239)
+BROWN = (119, 110, 101)
+BLACK = (0,0,0)
+WHITE = (255, 255, 255)
+
+class Dropdown:
+    def __init__(self, x, y, width, height, options, default):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.options = options
+        self.selected_option = default
+        self.option_height = height
+        self.open = False
+        self.font = pygame.font.SysFont(None, 40)
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, BROWN, self.rect.inflate(4, 4)) #draws a border around selected board size option
+        pygame.draw.rect(screen, WHITE, self.rect)
+        selected_text = self.font.render(self.selected_option, True, BROWN)
+        selected_text_rect = selected_text.get_rect(center=self.rect.center)  #centers the text
+        screen.blit(selected_text, selected_text_rect)
+        
+        if self.open: #if the dropdown menu is opened
+            for i in range(len(self.options)):  
+                option = self.options[i] 
+                option_rect = pygame.Rect(self.rect.x, self.rect.y + (i + 1) * self.option_height, self.rect.width, self.option_height) #calculates positions of dropdown options
+                pygame.draw.rect(screen, (0, 0, 0), option_rect.inflate(4, 4))  #black border for drop down options
+                pygame.draw.rect(screen, (119, 110, 101), option_rect) #draws board size option button           
+                option_text = self.font.render(option, True, (255, 255, 255))       #draws text
+                option_text_rect = option_text.get_rect(center=option_rect.center)  #centers the text
+                screen.blit(option_text, option_text_rect)
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                self.open = not self.open #if user clicks on options open state will be true
+            elif self.open: #checks if user clicks on an option
+                for i in range(len(self.options)):
+                    option = self.options[i]
+                    option_rect = pygame.Rect(self.rect.x, self.rect.y + (i + 1) * self.option_height, self.rect.width, self.option_height)
+                    if option_rect.collidepoint(event.pos):
+                        self.selected_option = option
+                        self.open = False
+                        return self.selected_option
+        return None
