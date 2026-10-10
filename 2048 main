@@ -1,0 +1,490 @@
+import pygame
+from pygame.locals import *
+import sys
+import random
+
+from dropdownmenu import Dropdown
+from tile import Tile
+from button import Button
+from tilelibrary import tilecolours
+from node import Node
+from node import getBestTwoMoves
+
+#constants to represent the window width and height
+WINWIDTH = 700
+WINHEIGHT = 800
+FPS = 60
+
+#general colours defined as constants
+BG = (250,248,239)
+BROWN = (119, 110, 101)
+BLACK = (0,0,0)
+WHITE = (255, 255, 255)
+YELLOW = (236, 196, 2)
+ORANGE = (234, 90, 56)
+MOREORANGE = (242, 177, 121)
+
+BOARDSTART_X = 119  #x position tiles start at
+BOARDSTART_Y = 279  #y position tiles start at
+TILE_SIZE = 110     #constant to define tile size
+TILE_PADDING = 12   #this constant rounds edges of tiles 
+
+pygame.init()
+screen = pygame.display.set_mode((WINWIDTH, WINHEIGHT))
+pygame.display.flip()
+
+#draws background elements for each screen
+def drawBackground(fontSize, fontPosition, imageSize, imagePosition):
+
+    abc_image = pygame.image.load('abcimage.png').convert_alpha()
+    abc_image = pygame.transform.scale(abc_image, imageSize)
+    screen.blit(abc_image, imagePosition)
+
+    #draws title
+    font = pygame.font.SysFont('clearsansbold.ttf', fontSize)
+    screen.blit(font.render('2048', True, BROWN,), fontPosition)
+
+def displayMenu(): #menu screen
+    pygame.display.set_caption('Menu')
+
+    while True:
+        screen.fill(BG)
+        mousePosition = pygame.mouse.get_pos()
+        drawBackground(200,(325, 70), (200,200), (50, 40))
+
+        #creates three menu buttons
+        playButton = Button(shape = getButton(YELLOW, 420, 100), pos = (350, 340), textInput = "Play Game", font = getFont(50), baseColour = BG, hoveringColour = WHITE, hoverFontSizeIncrease = 1)
+        optionsButton = Button(shape = getButton(ORANGE, 420, 100), pos = (350, 490),textInput = "Rules", font = getFont(50), baseColour = BG, hoveringColour = WHITE, hoverFontSizeIncrease = 1)
+        quitButton = Button(shape = getButton(MOREORANGE, 420, 100),pos = (350, 640),textInput = "Quit", font = getFont(50), baseColour = BG, hoveringColour = WHITE, hoverFontSizeIncrease = 1)
+
+        for button in [playButton, optionsButton, quitButton]: #text in menu buttons will slightly change colour if hovered over
+            button.changeColour(mousePosition)
+            button.update(screen)
+            
+        #event handling which controls what happens when different buttons are pressed
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if playButton.checkForInput(mousePosition):
+                    Game()
+                if optionsButton.checkForInput(mousePosition):
+                    options()
+                if quitButton.checkForInput(mousePosition):
+                    pygame.quit()
+                    sys.exit()
+
+        pygame.display.update()
+
+        
+def getFont(size): #retrieves font used in game
+    return pygame.font.Font("clearsansbold.ttf", size)
+
+def getButton(colour, width, height):#draws buttons
+    button_surface = pygame.Surface((width, height))
+    button_surface.fill(colour)
+    return button_surface
+
+def Game(): #game screen
+    pygame.display.set_caption('Play Game')
+    board = initializeBoard(tilecolours)
+    #flags and variables initialised at the start og game
+    key_pressed, movesQueue, score, gameOver, gameWon, hintText = False, [], 0, False, False, None
+    
+    while True:
+        mousePosition = pygame.mouse.get_pos()
+        screen.fill(BG)
+        
+        #game screen elements defined and put onto screen
+        drawBackground(140, (215, 60), (140,140), (40, 30))
+        #draws back to menu button to screen
+        backfromPlay = Button(shape = getButton(BROWN, 36, 38), pos = (29,37), textInput = '≡', font = getFont(38), baseColour = BG, hoveringColour = WHITE, hoverFontSizeIncrease = 0)
+        backfromPlay.update(screen)
+        #initialises main game elements on screen
+        displayboardBackground(board)
+        drawPieces(screen, board)
+        displayScore(screen, score)
+        #draws hint button to screen
+        hintButton = Button(shape = getButton(BROWN, 115, 45), pos = (170,220), textInput = 'AI Hint', font = getFont(30), baseColour = WHITE, hoveringColour = WHITE, hoverFontSizeIncrease = 0)
+        hintButton.update(screen)
+
+        if not gameOver and not gameWon:
+            if hintText:
+                screen.blit(getFont(30).render(hintText, True, BROWN), (250, 200))
+            if movesQueue:
+                successfulMove, newTile, score = moveTiles(movesQueue, board, score)
+                addRandomTile(board, tilecolours)
+
+        gameOver = isgameOver(board) #flag to check if game has been lost and update
+        gameWon = isgameWon(board)   ##flag to check if game has been won and update
+
+        if gameOver: #displays game over screen
+            displayGameEndScreen()
+            font = pygame.font.SysFont('clearsansbold.ttf', 115)
+            screen.blit(font.render('Game Over!', True, BROWN), (124, 350))
+            
+        if gameWon: #displays game won screen
+            displayGameEndScreen()
+            font = pygame.font.SysFont('clearsansbold.ttf', 115)
+            screen.blit(font.render('You Won!', True, BROWN), (170, 350))
+
+        if gameWon or gameOver: #displays restart button
+            restartButton = Button(shape=getButton(BLACK, 250, 70), pos=(350, 500), textInput="Restart", font=getFont(40), baseColour=WHITE, hoveringColour=WHITE, hoverFontSizeIncrease=0)
+            restartButton.update(screen)
+
+        for event in pygame.event.get(): #allows user to quit game
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if not gameOver and not gameWon and event.type == pygame.MOUSEBUTTONDOWN:
+
+                if hintButton.checkForInput(mousePosition): #if hint button selected
+                    root_node = Node(board, score=0, move=None, depth = 0, parent=None) #define current board state as root node
+                    bestMove1, bestMove2 = getBestTwoMoves(root_node) #return 2 best moves from MCTS algorithm
+                    hintText = getHint(bestMove1, bestMove2) #store hint as text
+                    screen.blit(getFont(30).render(hintText, True, BROWN), (250, 200)) #displays hint on screen
+
+                if backfromPlay.checkForInput(mousePosition):
+                    displayMenu() 
+
+            #restart game logic when restart button clicked
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if restartButton.checkForInput(mousePosition):
+                    Game()
+                    
+            #controls moves entered by user being enqueued for execution
+            if not gameOver and event.type == pygame.KEYDOWN:
+                move = getInputKey(event) 
+                if move:
+                    addMovetoQueue(move, movesQueue)
+                    
+        pygame.display.update()
+
+def displayGameEndScreen(): #draws transparent screen over board when game is over
+    shape_surf = pygame.Surface((500, 500), pygame.SRCALPHA)
+    shape_surf.fill((219, 213, 213,180))        
+    screen.blit(shape_surf, (108,268))
+
+def options(): #options screen
+    pygame.display.set_caption('Rules')
+    boardSizeoptions = ["4 x 4", "5 x 5", "3 x 3"]
+    dropdown = Dropdown(383, 600, 150, 40, boardSizeoptions, boardSizeoptions[0])
+
+    while True:
+        mousePosition = pygame.mouse.get_pos()
+        screen.fill(BG)
+
+        #back button to return to the menu
+        backfromOptions = Button(shape=getButton(BROWN, 36, 38), pos=(29, 37), textInput='≡', font=getFont(38), baseColour=BG, hoveringColour=WHITE, hoverFontSizeIncrease=0)
+        backfromOptions.update(screen)
+
+        drawBackground(200, (325, 70), (200, 200), (50, 40))
+
+        #text that displays rules of game
+        rulespos = 245
+        screen.blit(getFont(40).render('How to play:', True, (187, 173, 160)), (250, rulespos - 15))
+        screen.blit(getFont(32).render('Use your arrow keys to move the tiles.', True, (187, 173, 160)), (75, rulespos + 44))
+        screen.blit(getFont(32).render('When two tiles with the same letter touch,', True, (187, 173, 160)), (50, rulespos + 84))
+        screen.blit(getFont(32).render('they merge into one.', True, (187, 173, 160)), (200, rulespos + 120))
+        screen.blit(getFont(32).render('Join the letters and get to the Z tile!', True, (187, 173, 160)), (100, rulespos + 160))
+        screen.blit(getFont(32).render('Click AI Hint button for the next', True, (187, 173, 160)), (110, rulespos + 220))
+        screen.blit(getFont(32).render('best two moves!', True, (187, 173, 160)), (250, rulespos + 260))
+
+        screen.blit(getFont(32).render('Board Size:', True, BROWN), (185, rulespos + 350))
+
+        #draws dropdown menu for board size selection
+        dropdown.draw(screen)
+
+        # event handling
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if backfromOptions.checkForInput(mousePosition):
+                    displayMenu()
+                # handles dropdown menu
+                selected_option = dropdown.handle_event(event)
+                if selected_option:
+                    print(f"Board size selected: {selected_option}")
+                    boardSize = selected_option
+
+            pygame.display.update()
+
+def displayboardBackground(board): #displays background for board
+    pygame.draw.rect(screen, (187, 173, 160), [109, 270, 500, 500], 0, 10)
+
+def initializeBoard(tilecolours):
+    board = [[None for _ in range(4)] for _ in range(4)]
+    
+    #randomly place two starting tiles
+    for i in range(2):
+        row = random.randint(0, 4 - 1)
+        col = random.randint(0, 4 - 1)
+        if board[row][col] is None:
+            x = BOARDSTART_X + col * (TILE_SIZE + TILE_PADDING)
+            y = BOARDSTART_Y + row * (TILE_SIZE + TILE_PADDING)
+            board[row][col] = Tile('A', (x,y), TILE_SIZE, pygame.font.SysFont('clearsansbold.ttf', 72), tilecolours['dark text'], tilecolours)
+                
+    return board
+
+def addRandomTile(board, tilecolours): #function to randomly place a tile after a move
+    empty_positions = [] #list of empty tiles
+    for row in range(4):
+        for col in range(4):
+            if board[row][col] is None:
+                empty_positions.append((row, col))
+    
+    if len(empty_positions) > 0: #check if there are any empty spots
+        row, col = random.choice(empty_positions) #select a random empty position
+        x = BOARDSTART_X + col * (TILE_SIZE + TILE_PADDING) #calculate the x position for the new tile
+        y = BOARDSTART_Y + row * (TILE_SIZE + TILE_PADDING) #calculate the y position for the new tile
+        #place new tile at the selected position
+        board[row][col] = Tile('A', (x, y), TILE_SIZE, pygame.font.SysFont('clearsansbold.ttf', 72), tilecolours['dark text'], tilecolours)
+    
+    return board
+
+def drawPieces(screen, board): #draws tiles onto board randomly
+    for i in range(len(board)):
+        for j in range(len(board[i])):  
+            tile = board[i][j]
+            x = BOARDSTART_X + j * (TILE_SIZE + TILE_PADDING)
+            y = BOARDSTART_Y + i * (TILE_SIZE + TILE_PADDING)
+            if tile:
+                tile.draw(screen)
+            else:
+                pygame.draw.rect(screen, tilecolours['empty'], [x, y, TILE_SIZE, TILE_SIZE], border_radius=10)
+
+def getInputKey(event): #this will retrieve the move the user has entered
+    if event.type == pygame.KEYDOWN:
+        if event.key == K_LEFT:
+            move = "left"
+            return move
+        elif event.key == K_RIGHT:
+            move = "right"
+            return move
+        elif event.key == K_UP:
+            move = "up"
+            return move
+        elif event.key == K_DOWN:
+            move = "down"
+            return move
+    else:
+        return None
+
+def addMovetoQueue(move, movesQueue): #this adds moves to the moves queue
+    if move in ['up', 'down', 'left', 'right']:
+        movesQueue.append(move)
+
+def moveTiles(movesQueue, board, score):
+    successfulMove = False
+    if len(movesQueue) >= 1:
+        move = movesQueue.pop(0) #dequeues next move to be executed
+        if move == 'up':
+            successfulMove = moveUp(board, score)
+        if move == 'down':
+            successfulMove = moveDown(board, score)
+        if move == 'left':
+            successfulMove = moveLeft(board, score)
+        if move == 'right':
+            successfulMove = moveRight(board, score)
+
+    return successfulMove
+                                        
+def moveUp(board, score):
+    newTile = ''
+    successfulMove = False
+    for col in range(len(board)): #loops through each column
+        temp = [board[row][col] for row in range(len(board)) if board[row][col] is not None] #temporary list of tiles on board
+
+        for tile in temp:
+           tile.hasMerged = False #tiles in temp list have not yet merged
+            
+        i = 0 #used to loop through temp list
+        while i < len(temp) - 1:
+            if temp[i].letter == temp[i + 1].letter and not temp[i].hasMerged and not temp[i + 1].hasMerged: #checks if tiles can merge
+                newTile = temp[i].nextLetter(temp[i].letter)
+                temp[i].hasMerged = True     #merge tiles
+                temp.pop(i + 1) #remove the second tile
+                successfulMove = True
+                score = calculateScore(newTile, score)
+
+            else:
+                i += 1
+
+        for row in range(len(board)):
+            if row < len(temp):
+                board[row][col] = temp[row]
+                board[row][col].position = (BOARDSTART_X + col * (TILE_SIZE + TILE_PADDING),
+                                            BOARDSTART_Y + row * (TILE_SIZE + TILE_PADDING)) # Fill with tiles from temp
+            else:
+                board[row][col] = None
+
+    return successfulMove, newTile, score
+
+def moveDown(board, score):
+    newTile = ''
+    successfulMove = False
+    for col in range(len(board)): #loops through each column
+        temp = [board[row][col] for row in range(len(board)) if board[row][col] is not None] #temporary list of tiles on board
+
+        for tile in temp:
+           tile.hasMerged = False #tiles in temp list have not yet merged
+            
+        i = len(temp) - 1 #used to loop through temp list
+        while i > 0:
+            if temp[i].letter == temp[i - 1].letter and not temp[i].hasMerged and not temp[i - 1].hasMerged: #checks if tiles can merge
+                newTile = temp[i].nextLetter(temp[i].letter)
+                temp[i].hasMerged = True     #merge tiles
+                temp.pop(i - 1) #remove the second tile
+                i -= 1
+                successfulMove = True
+                score = calculateScore(newTile, score)
+            else:
+                i -= 1
+
+        for row in range(len(board) - 1, -1, -1, ):
+            if len(temp) > 0:
+                board[row][col] = temp.pop(-1)
+                board[row][col].position = (BOARDSTART_X + col * (TILE_SIZE + TILE_PADDING),
+                                            BOARDSTART_Y + row * (TILE_SIZE + TILE_PADDING)) # Fill with tiles from temp
+            else:
+                board[row][col] = None
+
+    return successfulMove, newTile, score
+
+def moveLeft(board, score):
+    newTile = ''
+    successfulMove = False
+    for row in range(len(board)): #loops through each row
+        temp = [board[row][col] for col in range(len(board)) if board[row][col] is not None] #temporary list of tiles on board
+
+        for tile in temp:
+           tile.hasMerged = False #tiles in temp list have not yet merged
+            
+        i = 0 #used to loop through temp list
+        while i < len(temp) - 1:
+            if temp[i].letter == temp[i + 1].letter and not temp[i].hasMerged and not temp[i + 1].hasMerged: #checks if tiles can merge
+                newTile = temp[i].nextLetter(temp[i].letter)
+                temp[i].hasMerged = True     #merge tiles
+                temp.pop(i + 1) #remove the second tile
+                successfulMove = True
+                score = calculateScore(newTile, score)
+
+            else:
+                i += 1
+
+        for col in range(len(board)):
+            if col < len(temp):
+                board[row][col] = temp[col]
+                board[row][col].position = (BOARDSTART_X + col * (TILE_SIZE + TILE_PADDING),
+                                            BOARDSTART_Y + row * (TILE_SIZE + TILE_PADDING)) # Fill with tiles from temp
+            else:
+                board[row][col] = None
+
+    return successfulMove, newTile, score
+
+def moveRight(board, score):
+    newTile = ''
+    successfulMove = False
+    for row in range(len(board)): #loops through each row
+        temp = [board[row][col] for col in range(len(board)) if board[row][col] is not None] #temporary list of tiles on board
+
+        for tile in temp:
+           tile.hasMerged = False #tiles in temp list have not yet merged
+            
+        i = len(temp) - 1 #used to loop through temp list
+        while i > 0:
+            if temp[i].letter == temp[i - 1].letter and not temp[i].hasMerged and not temp[i - 1].hasMerged: #checks if tiles can merge
+                newTile = temp[i].nextLetter(temp[i].letter)
+                temp[i].hasMerged = True     #merge tiles
+                temp.pop(i - 1) #remove second tile
+                i -= 1
+                successfulMove = True
+                score = calculateScore(newTile, score)
+
+            else:
+                i -= 1
+
+        for col in range(len(board) - 1, -1, -1):
+            if len(temp) > 0:
+                board[row][col] = temp.pop(-1)
+                board[row][col].position = (BOARDSTART_X + col * (TILE_SIZE + TILE_PADDING),
+                                            BOARDSTART_Y + row * (TILE_SIZE + TILE_PADDING)) # Fill with tiles from temp
+            else:
+                board[row][col] = None
+
+    return successfulMove, newTile, score
+
+def displayScore(screen, score, x_pos=497, y_pos=33, button_width=165, button_height=40, font_size=30):
+    #draw buttons
+    scoreButton1 = pygame.draw.rect(screen, BROWN, pygame.Rect(x_pos, y_pos, button_width, button_height))
+    scoreButton2 = pygame.draw.rect(screen, BROWN, pygame.Rect(x_pos, y_pos + button_height, button_width, button_height))
+    #render text
+    scoreText1 = getFont(font_size).render('Score: ', True, WHITE)
+    scoreText2 = getFont(font_size).render(str(score), True, WHITE)
+    #center text
+    text_rect1 = scoreText1.get_rect(center=scoreButton1.center)
+    text_rect2 = scoreText2.get_rect(center=scoreButton2.center)
+    screen.blit(scoreText1, text_rect1)
+    screen.blit(scoreText2, text_rect2)
+
+def calculateScore(newTile, score):
+    if newTile != ' ':
+        score += 10 #score should add 10 points for any successful move
+        scoreIncrement = 2 ** (ord(newTile) - ord('A'))  #score increments should increase by a power of 2 for every new tile
+    else:
+        scoreIncrement = 0
+    return score + scoreIncrement #returns updated score5
+
+def isgameWon(board):
+    for row in board:
+        for cell in row:
+            if cell != None and cell.letter == 'Z':
+                return True
+            else:
+                return False
+
+def isgameOver(board):
+    #check for empty cells
+    for row in board:
+        for cell in row:
+            if cell is None:  #if there's an empty cell, game is not over
+                    return False
+
+    #check possible merges 
+    for row in range(4):
+            for col in range(4):
+                if board[row][col] is None:
+                    return False
+                if row > 0:
+                    if board[row-1][col].letter == board[row][col].letter:
+                        return False
+                if row < 4-1:
+                    if board[row+1][col].letter == board[row][col].letter:
+                        return False
+                if col > 0:
+                    if board[row][col-1].letter == board[row][col].letter:
+                        return False
+                if col < 4-1:
+                    if board[row][col+1].letter == board[row][col].letter:
+                        return False
+
+    #if no empty cells and no possible merges game is over
+    return True
+
+def getHint(bestMove1, bestMove2): #stores best moves as text and returns
+    if bestMove1 and bestMove2:
+        hintText = f'{bestMove1} → {bestMove2}'
+    elif bestMove1:
+        hintText = f'{bestMove1}'
+    else:
+        hintText = "No moves found"
+        
+    return hintText
+
+
+displayMenu()
+
