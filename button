@@ -1,0 +1,46 @@
+#class for game buttons
+import pygame
+from pygame.locals import *
+import sys
+
+
+class Button():
+    def __init__(self, shape, pos, textInput, font, baseColour, hoveringColour, hoverFontSizeIncrease):
+        self.shape = shape
+        self.x_pos = pos[0]
+        self.y_pos = pos[1]
+        self.font = font
+        self.base_colour = baseColour
+        self.hovering_colour = hoveringColour
+        self.text_input = textInput
+        self.hoverFontSizeIncrease = hoverFontSizeIncrease
+        self.original_font_size = font.get_height()
+        self.text = self.font.render(self.text_input, True, self.base_colour)
+        if self.shape is None:
+            self.shape = self.text
+        self.rect = self.shape.get_rect(center=(self.x_pos ,self.y_pos))
+        self.text_rect = self.text.get_rect(center=(self.x_pos, self.y_pos))
+
+
+    def update(self,screen):
+        if self.shape is not None:
+            screen.blit(self.shape, self.rect)
+        screen.blit(self.text, self.text_rect)
+
+    def checkForInput(self, position):
+        if position[0] in range(self.rect.left, self.rect.right) and position[1] in range(self.rect.top, self.rect.bottom):
+            return True
+        return False
+
+    def changeColour(self, position):
+        if self.rect.collidepoint(position) and self.hoverFontSizeIncrease > 0:
+             #increase font size if hovering
+            new_font_size = self.font.get_height() + self.hoverFontSizeIncrease
+            larger_font = pygame.font.Font("clearsansbold.ttf", new_font_size)
+            self.text = larger_font.render(self.text_input, True, self.hovering_colour)
+        else:
+            #revert to original font size
+            self.text = self.font.render(self.text_input, True, self.base_colour)
+        
+
+        self.text_rect = self.text.get_rect(center=(self.x_pos, self.y_pos))
