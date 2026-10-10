@@ -1,0 +1,331 @@
+import random
+import math
+from tile import Tile
+
+class Node:
+    def __init__(self, board, score, move, depth, parent):
+        self._board = board
+        self._move = move
+        self._depth = depth
+        self._moves = [] if parent is None else parent._moves + [move]  # stores moves leading to this node
+        self._score = score    #current score when hint requested
+        self._parent = parent  
+        self._children = []  
+        self._visits = 0
+        self._value = evaluate_board(board)  #score produced by child nodes
+
+    def generateChildren(self): #generate children nodes for all possible moves
+        moves = ["up", "down", "left", "right"]
+        
+        for move in moves:
+            new_board = simulate_move(self._board, move)
+
+            if new_board != self._board:  #ensures only valid moves added
+                child_node = self.addChild(new_board, self._score, move, 1, self)
+
+                for second_move in moves:
+                    second_board = simulate_move(new_board, second_move)
+                    if second_board != new_board:  # Ensure move is valid
+                        grandchild_node = child_node.addChild(second_board, child_node._score, second_move, 2, child_node)
+
+                        
+    def getChildren(self):
+        return self._children
+
+    def addChild(self, board, score, move, depth, parent): #creates a child node and adds it to the current node
+        child_node = Node(board, score, move, depth, parent)
+        self._children.append(child_node)
+        if child_node._depth == 2:  # Only evaluate grandchild nodes (depth 2)
+            child_node._value = evaluate_board(board)
+        return child_node
+
+    def update(self, result): #backpropagation: update values after a simulation 
+        self._visits += 1
+        self._value += result
+
+    def getVisits(self):
+        return self.visits 
+
+
+def simulate_move(board, move): #simulate a move on a copy of the board and return the new state 
+    new_board = [row[:] for row in board]
+    if move == "up":
+        new_board = move_up(new_board)
+    elif move == "down":
+        new_board = move_down(new_board)
+    elif move == "left":
+        new_board = move_left(new_board)
+    elif move == "right":
+        new_board = move_right(new_board)
+
+    empty_spaces = [(r, c) for r in range(len(new_board)) for c in range(len(new_board[0])) if new_board[r][c] is None]
+    if empty_spaces:  # if there are empty spaces place random 'A' tile
+        r, c = random.choice(empty_spaces)  # choose a random empty space
+        new_tile = Tile(letter='A',  #define new A tile to be in a random place as an object on SIMULATED board
+            position=(r, c),
+            tilesize=2, 
+            font = None,
+            lettercolour="white",  
+            tilecolours="other"  
+            )
+        new_board[r][c] = new_tile
+
+    return new_board
+
+def move_up(board): #this function simulates a move up on a copy of the current node board state
+    moved = False
+    temp_board = [row[:] for row in board]  # copy of the board
+
+    # list of letters for simulation
+    letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+
+    for col in range(len(board[0])):
+        temp = [temp_board[row][col] for row in range(len(temp_board)) if temp_board[row][col] is not None]
+
+        new_column = []
+        skip = False
+        for i in range(len(temp)):
+            if skip:
+                skip = False
+                continue
+            if (i + 1 < len(temp)) and (temp[i].letter == temp[i + 1].letter):
+                current_letter_index = letters.index(temp[i].letter)
+                new_letter = letters[current_letter_index + 1] if current_letter_index + 1 < len(letters) else temp[i].letter
+
+                new_tile = Tile(new_letter, temp[i].position, temp[i].tilesize, None, temp[i].lettercolour, temp[i].tilecolours)
+                new_column.append(new_tile)
+                moved = True
+                skip = True
+            else:
+                new_column.append(temp[i])
+
+        new_column.extend([None] * (len(temp_board) - len(new_column)))
+
+        for i in range(len(temp_board)):
+            if temp_board[i][col] != new_column[i]:
+                moved = True
+            temp_board[i][col] = new_column[i]
+
+    return temp_board
+
+def move_down(board): #this function simulates a move down on a copy of the current node board state
+    moved = False
+    temp_board = [row[:] for row in board]  #copy of the board
+
+    # list of letters for simulation
+    letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+
+    for col in range(len(temp_board[0])):
+        temp = [temp_board[row][col] for row in range(len(temp_board)-1, -1, -1) if board[row][col] is not None]  # Traverse from bottom to top
+
+        new_column = []
+        skip = False
+        for i in range(len(temp)):
+            if skip:
+                skip = False
+                continue
+            if (i + 1 < len(temp)) and (temp[i].letter == temp[i + 1].letter):
+                current_letter_index = letters.index(temp[i].letter)
+                new_letter = letters[current_letter_index + 1] if current_letter_index + 1 < len(letters) else temp[i].letter
+
+                new_tile = Tile(new_letter, temp[i].position, temp[i].tilesize, None, temp[i].lettercolour, temp[i].tilecolours)
+                new_column.append(new_tile)
+                moved = True
+                skip = True
+            else:
+                new_column.append(temp[i])
+
+        new_column.extend([None] * (len(board) - len(new_column)))
+
+        for i in range(len(temp_board)):
+            if temp_board[i][col] != new_column[len(board) - 1 - i]:
+                moved = True
+            temp_board[i][col] = new_column[len(board) - 1 - i]  #updates from bottom to top
+
+    return temp_board
+
+def move_left(board): #this function simulates a move left on a copy of the current node board state
+    moved = False
+    temp_board = [row[:] for row in board]  # copy of the board
+
+    # list of letters for simulation 
+    letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+
+    for row in range(len(board)):
+        temp = [tile for tile in temp_board[row] if tile is not None]
+
+        new_row = []
+        skip = False
+        for i in range(len(temp)):
+            if skip:
+                skip = False
+                continue
+            if (i + 1 < len(temp)) and (temp[i].letter == temp[i + 1].letter):
+                current_letter_index = letters.index(temp[i].letter)
+                new_letter = letters[current_letter_index + 1] if current_letter_index + 1 < len(letters) else temp[i].letter
+
+                # create a new tile with the new letter
+                new_tile = Tile(new_letter, temp[i].position, temp[i].tilesize, None, temp[i].lettercolour, temp[i].tilecolours)
+                new_row.append(new_tile)
+                moved = True
+                skip = True
+            else:
+                new_row.append(temp[i])
+
+        new_row.extend([None] * (len(board[0]) - len(new_row)))
+
+        if new_row != temp_board[row]:  # checks if row has changed
+            moved = True
+        temp_board[row] = new_row
+
+    return temp_board
+
+def move_right(board): #this function simulates a move right on a copy of the current node board state
+    moved = False
+    temp_board = [row[:] for row in board]  # copy of the board
+
+    # list of letters for simulation
+    letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+
+    for row in range(len(board)):
+        temp = [tile for tile in temp_board[row] if tile is not None][::-1]  # reverse the order
+
+        new_row = []
+        skip = False
+        for i in range(len(temp)):
+            if skip:
+                skip = False
+                continue
+            if (i + 1 < len(temp)) and (temp[i].letter == temp[i + 1].letter):
+                current_letter_index = letters.index(temp[i].letter)
+                new_letter = letters[current_letter_index + 1] if current_letter_index + 1 < len(letters) else temp[i].letter
+
+                new_tile = Tile(new_letter, temp[i].position, temp[i].tilesize, None, temp[i].lettercolour, temp[i].tilecolours)
+                new_row.append(new_tile)
+                moved = True
+                skip = True
+            else:
+                new_row.append(temp[i])
+
+        new_row.extend([None] * (len(board[0]) - len(new_row)))
+
+        new_row.reverse()  
+        if new_row != temp_board[row]:  # checks if row has changed
+            moved = True
+        temp_board[row] = new_row
+
+
+    return temp_board
+
+def evaluate_board(board): #this function evaluates the current board state based on the tiles within it and returns value of each node
+    value = 0
+    empty_spaces = 0
+    max_empty_spaces = 14
+    
+    for row in board:
+        for tile in row:
+            if tile is not None:  #only considers non-empty tiles
+                value += 2 ** (ord(tile.letter) - ord('A')) #increments score based on tile letter (A = 2, B = 4, etc.) as in main game
+            else:
+                empty_spaces += 1 #empty spaces taken into account to prevent board filling up and think of long-term game
+
+    empty_space_bonus = (empty_spaces / max_empty_spaces) 
+    value += empty_space_bonus
+    
+    return value
+
+
+def getMove(self): #returns move that has caused the board state of the node 
+    return self._move
+
+def selectNode(node, C=1.41): # selects the best child node using UCT (Upper Confidence Bound for Trees) 
+    if not node.getChildren():
+        return node  
+
+    parent_visits = max(1, node._visits)  # prevent division by zero
+    return max(node._children, key=lambda child: 
+               (child._value / (child._visits + 1)) +  
+               C * math.sqrt(math.log(parent_visits) / (child._visits + 1)))  
+
+def expandNode(node): #expands a node by creating children for each possible move 
+    node.generateChildren()
+
+def simulateGame(node): #simulates a random game from the given node and returns the result
+    if not node.getChildren():
+        if node._depth == 2:
+            return node._value  
+    
+    best_child = selectNode(node)  
+    if not best_child.getChildren():
+        return best_child._value  
+
+    best_grandchild = max(best_child.getChildren(), key=lambda x: x._value)
+    
+    return best_grandchild._value
+
+def isgameOver(board): #checks if the game is over for a node
+    #check for empty cells
+    for row in board:
+        for cell in row:
+            if cell is None:  #if there's an empty cell, game is not over
+                    return False
+
+    #check possible merges 
+    for row in range(4):
+            for col in range(4):
+                if board[row][col] is None:
+                    return False
+                if row > 0:
+                    if board[row-1][col].letter == board[row][col].letter:
+                        return False
+                if row < 4-1:
+                    if board[row+1][col].letter == board[row][col].letter:
+                        return False
+                if col > 0:
+                    if board[row][col-1].letter == board[row][col].letter:
+                        return False
+                if col < 4-1:
+                    if board[row][col+1].letter == board[row][col].letter:
+                        return False
+
+    #if no empty cells and no possible merges game is over
+    return True
+
+
+
+def backpropagate(node, result): #propagates simulation results up the tree 
+    while node:
+        node._value += result  # update the node's score with the result of the simulation
+        node._visits += 1  # counts number of times this node was visited 
+        node = node._parent  # moves up to the parent node
+
+
+def getBestTwoMoves(root): #function which executes full MCTS and returns hint to the user
+    possible_moves = ["up", "down", "left", "right"]
+    bestMove1, bestMove2 = None, None
+    bestValue = -float("inf") 
+
+    expandNode(root)  # expand root node to generate first and second set of children
+
+    if not root.getChildren():
+        return None, None  # no moves possible in this case from the current board state (root node)
+
+    for child in root.getChildren(): #iterates through child nodes
+        for grandchild in child.getChildren(): #iterates through leaf nodes
+            if grandchild._depth == 2: #checks that the node selected is a leaf node
+                result = simulateGame(grandchild) #simulates game from leaf node
+                backpropagate(grandchild, result) #backpropagates result of game back up the tree
+
+                # if this grandchild node has the best score, update best move sequence
+                if grandchild._value > bestValue:  # check node value against current highest value
+                    bestValue = grandchild._value
+                    #retrieves moves to get to grandchild node which leads to best state from moves array for node
+                    bestMove1 = grandchild._moves[0]
+                    bestMove2 = grandchild._moves[1]
+                
+
+    if bestMove1 is None or bestMove2 is None:
+        return None, None  # no valid moves found
+
+    return bestMove1, bestMove2
+
